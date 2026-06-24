@@ -114,6 +114,7 @@ export type OnChainActivityEvent = {
     | "nft_minted"
     | "relocation_started"
     | "relocation_received"
+    | "relocation_cancelled"
     | "redemption_requested"
     | "redemption_cancelled"
     | "vault_released_for_redemption"

@@ -14,23 +14,28 @@ const EVENT_LABELS: Record<OnChainActivityEvent["type"], string> = {
   nft_minted: "NFT minted",
   relocation_started: "Relocation vault dispatched",
   relocation_received: "Relocation vault received",
+  relocation_cancelled: "Relocation cancelled",
   redemption_requested: "Redemption requested",
   redemption_cancelled: "Redemption cancelled",
   vault_released_for_redemption: "Vault released for redemption",
   nft_removed: "NFT removed",
 };
 
+type ActivitySummaryItem = {
+  status: CollectibleRequestTokenStatus;
+  label: string;
+  eventType: OnChainActivityEvent["type"];
+  eventId?: string;
+};
+
 const POST_VERIFICATION_ACTIVITY_TYPES: OnChainActivityEvent["type"][] = [
   "vault_received_deposit",
   "relocation_started",
   "relocation_received",
+  "relocation_cancelled",
 ];
 
-const PIKACHU_ACTIVITY_CONFIG: {
-  status: CollectibleRequestTokenStatus;
-  label: string;
-  eventType: OnChainActivityEvent["type"];
-}[] = [
+const PIKACHU_ACTIVITY_CONFIG: ActivitySummaryItem[] = [
   {
     status: "DEPOSIT_OWNER_INITIATED",
     label: "Deposit Requested",
@@ -45,19 +50,27 @@ const PIKACHU_ACTIVITY_CONFIG: {
     status: "RELOCATION_VAULT_DISPATCHED",
     label: "Relocation Shipped",
     eventType: "relocation_started",
+    eventId: "evt-5",
   },
   {
     status: "RELOCATION_VAULT_RECEIVED",
     label: "Relocation Received",
     eventType: "relocation_received",
   },
+  {
+    status: "RELOCATION_VAULT_DISPATCHED",
+    label: "Relocation Shipped",
+    eventType: "relocation_started",
+    eventId: "evt-7",
+  },
+  {
+    status: "RELOCATION_PLATFORM_CANCELED",
+    label: "Relocation Cancelled",
+    eventType: "relocation_cancelled",
+  },
 ];
 
-const BLASTOISE_ACTIVITY_CONFIG: {
-  status: CollectibleRequestTokenStatus;
-  label: string;
-  eventType: OnChainActivityEvent["type"];
-}[] = [
+const BLASTOISE_ACTIVITY_CONFIG: ActivitySummaryItem[] = [
   {
     status: "DEPOSIT_OWNER_INITIATED",
     label: "Deposit Requested",
@@ -75,11 +88,7 @@ const BLASTOISE_ACTIVITY_CONFIG: {
   },
 ];
 
-const RAYQUAZA_ACTIVITY_CONFIG: {
-  status: CollectibleRequestTokenStatus;
-  label: string;
-  eventType: OnChainActivityEvent["type"];
-}[] = [
+const RAYQUAZA_ACTIVITY_CONFIG: ActivitySummaryItem[] = [
   {
     status: "DEPOSIT_OWNER_INITIATED",
     label: "Deposit Requested",
@@ -114,11 +123,7 @@ const RAYQUAZA_ACTIVITY_CONFIG: {
 
 const ACTIVITY_SUMMARY_CONFIG_BY_CARD: Record<
   string,
-  {
-    status: CollectibleRequestTokenStatus;
-    label: string;
-    eventType: OnChainActivityEvent["type"];
-  }[]
+  ActivitySummaryItem[]
 > = {
   "card-pikachu": PIKACHU_ACTIVITY_CONFIG,
   "card-blastoise": BLASTOISE_ACTIVITY_CONFIG,
@@ -139,7 +144,7 @@ const MOCK_DISPLAY_FALLBACKS = {
   verificationStatus: "Approved",
   requestId: "0x6f8a1183dd6d6cf851769fd34e11adf1a72ca8c4f6bd53de0f25d35123ab9d88",
   txHash: "0x0d68a2dc1498f6f9a7ad5f428b693d49684594d65bf6ec858f84bdf4fce8dd77",
-  vaultName: "Collector Crypt Vault",
+  vaultName: "Collector Crypt-Omni",
   signerWalletAddress: "0xBEEF1EAF00000000000000000000000000C0DE42",
   signature:
     "7f31de62bcfd9947e0f8b3d216f4ac9be3da8964b02756cb5f8af5a0ca9a9a7d4ce81654a708b933de",
@@ -220,12 +225,14 @@ export default async function CardDetailPage({
     MOCK_DISPLAY_FALLBACKS.signerWalletAddress;
   const verificationSignature =
     verificationEvent?.verifierSignature ?? MOCK_DISPLAY_FALLBACKS.signature;
-  const verificationRequestId = verificationEvent?.requestId ?? MOCK_DISPLAY_FALLBACKS.requestId;
   const verificationTxHash = verificationEvent?.txHash ?? MOCK_DISPLAY_FALLBACKS.txHash;
-  const physicalLocationDisplay = card.custody.currentVault?.countryCode ?? "US";
+  const isRedeemed = card.nft.status === "redeemed";
+  const physicalLocationDisplay = isRedeemed ? "-" : card.custody.currentVault?.countryCode ?? "US";
   const encryptedPhysicalAddressRaw =
-    card.custody.currentVault?.safeAddress ??
-    "EA121E405CFEA0783F93F4F97A2E2536ACBEF927949A6757EB100D11748521A44C64CB8602F05614633155D3BBB81C27301EB7548F75559C5FE73A76210A718AA46B74A987D7928B2B092FC053CE82950CBF80A65D44B9B69FDF177CE147A6";
+    isRedeemed
+      ? "-"
+      : card.custody.currentVault?.safeAddress ??
+        "EA121E405CFEA0783F93F4F97A2E2536ACBEF927949A6757EB100D11748521A44C64CB8602F05614633155D3BBB81C27301EB7548F75559C5FE73A76210A718AA46B74A987D7928B2B092FC053CE82950CBF80A65D44B9B69FDF177CE147A6";
   const encryptedPhysicalAddressDisplay = formatMaskedValue(encryptedPhysicalAddressRaw);
   const nftStatusDisplay = formatNftStatus(card.nft.status);
   const ownerAddressDisplay = card.nft.ownerAddress ?? MOCK_DISPLAY_FALLBACKS.ownerAddress;
@@ -331,10 +338,12 @@ export default async function CardDetailPage({
                 <p className="text-xs text-white/50">Encrypted physical address</p>
                 <div className="mt-1 flex items-center gap-2">
                   <p className="font-mono text-sm">{encryptedPhysicalAddressDisplay}</p>
-                  <CopyInlineButton
-                    value={encryptedPhysicalAddressRaw}
-                    label="Copy encrypted physical address"
-                  />
+                  {!isRedeemed ? (
+                    <CopyInlineButton
+                      value={encryptedPhysicalAddressRaw}
+                      label="Copy encrypted physical address"
+                    />
+                  ) : null}
                 </div>
               </div>
             </div>
@@ -364,13 +373,6 @@ export default async function CardDetailPage({
                       <p className="mt-1 text-sm font-medium">
                         {formatDateTime(verificationEvent.timestamp)}
                       </p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-white/50">Request ID</p>
-                      <div className="mt-1 flex items-center gap-2">
-                        <p className="font-mono text-sm">{truncateAddress(verificationRequestId, 6)}</p>
-                        <CopyInlineButton value={verificationRequestId} label="Copy request ID" />
-                      </div>
                     </div>
                     <div>
                       <p className="text-xs text-white/50">Tx Hash</p>
@@ -405,12 +407,12 @@ export default async function CardDetailPage({
                         <summary className="cursor-pointer text-[11px] uppercase tracking-wide text-white/70">
                           Details
                         </summary>
-                        <div className="mt-3 grid gap-2 text-xs text-white/70 sm:grid-cols-2">
+                        <div className="mt-3 grid gap-2 text-xs text-white/70">
                           <div>
                             <p className="text-white/50">Signer Wallet Address</p>
                             <div className="mt-1 flex items-center gap-2">
                               <p className="break-all font-mono">
-                                {formatMaskedValue(verificationSignerWalletAddress)}
+                                verifier (legit app): {formatMaskedValue(verificationSignerWalletAddress)}
                               </p>
                               <CopyInlineButton
                                 value={verificationSignerWalletAddress}
@@ -422,7 +424,7 @@ export default async function CardDetailPage({
                             <p className="text-white/50">Signature</p>
                             <div className="mt-1 flex items-center gap-2">
                               <p className="break-all font-mono">
-                                {formatMaskedValue(verificationSignature)}
+                                verifier signature: {formatMaskedValue(verificationSignature)}
                               </p>
                               <CopyInlineButton value={verificationSignature} label="Copy signature" />
                             </div>
@@ -438,12 +440,14 @@ export default async function CardDetailPage({
             </div>
             {activitySummaryConfig ? (
               <div className="mt-4 space-y-3">
-                {activitySummaryConfig.map((activityItem) => {
-                  const matchedEvent = sortedEvents.find(
-                    (event) => event.type === activityItem.eventType,
-                  );
-                  const shouldUseSourceVaultForPikachuRelocation =
-                    card.id === "card-pikachu" && activityItem.status === "RELOCATION_VAULT_DISPATCHED";
+                {activitySummaryConfig.map((activityItem, index) => {
+                  const matchedEvent = activityItem.eventId
+                    ? sortedEvents.find((event) => event.id === activityItem.eventId)
+                    : sortedEvents.find((event) => event.type === activityItem.eventType);
+                  const isRelocationShipped =
+                    activityItem.status === "RELOCATION_VAULT_DISPATCHED";
+                  const isRelocationCancelled =
+                    activityItem.status === "RELOCATION_PLATFORM_CANCELED";
                   const signerWalletAddress =
                     matchedEvent?.actorAddress ??
                     matchedEvent?.verifierAddress ??
@@ -451,25 +455,52 @@ export default async function CardDetailPage({
                   const signerSignature =
                     matchedEvent?.verifierSignature ?? MOCK_DISPLAY_FALLBACKS.signature;
                   const vaultDisplay =
-                    shouldUseSourceVaultForPikachuRelocation
-                      ? matchedEvent?.vaultFrom ??
-                        matchedEvent?.vaultTo ??
-                        MOCK_DISPLAY_FALLBACKS.vaultName
-                      : matchedEvent?.vaultTo ??
-                        matchedEvent?.vaultFrom ??
-                        MOCK_DISPLAY_FALLBACKS.vaultName;
+                    matchedEvent?.vaultTo ?? matchedEvent?.vaultFrom ?? MOCK_DISPLAY_FALLBACKS.vaultName;
+                  const activityVaultFrom =
+                    matchedEvent?.vaultFrom ?? matchedEvent?.vaultTo ?? MOCK_DISPLAY_FALLBACKS.vaultName;
+                  const activityVaultTo =
+                    matchedEvent?.vaultTo ?? matchedEvent?.vaultFrom ?? MOCK_DISPLAY_FALLBACKS.vaultName;
                   const activityRequestId = matchedEvent?.requestId ?? MOCK_DISPLAY_FALLBACKS.requestId;
                   const activityTxHash = matchedEvent?.txHash ?? MOCK_DISPLAY_FALLBACKS.txHash;
                   const activityTimestamp = matchedEvent?.timestamp ?? MOCK_DISPLAY_FALLBACKS.timestamp;
+                  const isRedemptionRequested =
+                    activityItem.status === "REDEMPTION_OWNER_REQUESTED";
+                  const ownerSignerWalletAddress =
+                    matchedEvent?.actorAddress ??
+                    matchedEvent?.verifierAddress ??
+                    MOCK_DISPLAY_FALLBACKS.signerWalletAddress;
+                  const platformSignerWalletAddress =
+                    matchedEvent?.verifierAddress ??
+                    matchedEvent?.actorAddress ??
+                    MOCK_DISPLAY_FALLBACKS.signerWalletAddress;
+                  const ownerSignerSignature =
+                    matchedEvent?.verifierSignature ?? MOCK_DISPLAY_FALLBACKS.signature;
+                  const platformSignerSignature =
+                    matchedEvent?.verifierSignature ?? MOCK_DISPLAY_FALLBACKS.signature;
+                  const signerLabelPrefix =
+                    activityItem.status === "DEPOSIT_OWNER_INITIATED"
+                      ? "user"
+                      : isRelocationShipped || isRelocationCancelled
+                        ? `vault (${activityVaultFrom})`
+                        : "vault (yamacardo)";
+                  const signatureLabelPrefix =
+                    activityItem.status === "DEPOSIT_OWNER_INITIATED"
+                      ? "user signature"
+                      : "vault signature";
 
                   return (
                     <div
-                      key={activityItem.status}
+                      key={`${activityItem.status}-${activityItem.eventType}-${activityItem.eventId ?? index}`}
                       className="rounded-lg border border-white/10 bg-brand/40 p-3"
                     >
-                      <div className="flex items-start gap-2">
-                        <span className="mt-1 h-2 w-2 rounded-full bg-primary" />
-                        <p className="text-sm font-medium">{activityItem.label}</p>
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex items-start gap-2">
+                          <span className="mt-1 h-2 w-2 rounded-full bg-primary" />
+                          <p className="text-sm font-medium">{activityItem.label}</p>
+                        </div>
+                        <span className="shrink-0 text-xs text-white/50">
+                          {formatDateTime(activityTimestamp)}
+                        </span>
                       </div>
                       <div className="mt-3 grid gap-2 text-xs text-white/70 sm:grid-cols-2">
                         <div>
@@ -486,7 +517,18 @@ export default async function CardDetailPage({
                           <p className="text-white/50">Status</p>
                           <p className="mt-1 font-mono">{activityItem.status}</p>
                         </div>
-                        {activityItem.status !== "DEPOSIT_OWNER_INITIATED" ? (
+                        {isRelocationShipped ? (
+                          <>
+                            <div>
+                              <p className="text-white/50">From Vault</p>
+                              <p className="mt-1">{activityVaultFrom}</p>
+                            </div>
+                            <div>
+                              <p className="text-white/50">To Vault</p>
+                              <p className="mt-1">{activityVaultTo}</p>
+                            </div>
+                          </>
+                        ) : activityItem.status !== "DEPOSIT_OWNER_INITIATED" ? (
                           <div>
                             <p className="text-white/50">Vault</p>
                             <p className="mt-1">{vaultDisplay}</p>
@@ -499,36 +541,78 @@ export default async function CardDetailPage({
                             <CopyInlineButton value={activityTxHash} label="Copy tx hash" />
                           </div>
                         </div>
-                        <div>
-                          <p className="text-white/50">Updated At</p>
-                          <p className="mt-1">{formatDateTime(activityTimestamp)}</p>
-                        </div>
                       </div>
                       <details className="mt-3 rounded-md border border-white/15 bg-brand/30 p-3">
                         <summary className="cursor-pointer text-[11px] uppercase tracking-wide text-white/70">
                           Details
                         </summary>
-                        <div className="mt-3 grid gap-2 text-xs text-white/70 sm:grid-cols-2">
+                        <div className="mt-3 grid gap-2 text-xs text-white/70">
                           <div>
                             <p className="text-white/50">Signer Wallet Address</p>
-                            <div className="mt-1 flex items-center gap-2">
-                              <p className="break-all font-mono">
-                                {formatMaskedValue(signerWalletAddress)}
-                              </p>
-                              <CopyInlineButton
-                                value={signerWalletAddress}
-                                label="Copy signer wallet address"
-                              />
-                            </div>
+                            {isRedemptionRequested ? (
+                              <div className="mt-1 space-y-2">
+                                <div className="flex items-center gap-2">
+                                  <p className="break-all font-mono">
+                                    owner: {formatMaskedValue(ownerSignerWalletAddress)}
+                                  </p>
+                                  <CopyInlineButton
+                                    value={ownerSignerWalletAddress}
+                                    label="Copy owner signer wallet address"
+                                  />
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <p className="break-all font-mono">
+                                    platform: {formatMaskedValue(platformSignerWalletAddress)}
+                                  </p>
+                                  <CopyInlineButton
+                                    value={platformSignerWalletAddress}
+                                    label="Copy platform signer wallet address"
+                                  />
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="mt-1 flex items-center gap-2">
+                                <p className="break-all font-mono">
+                                  {signerLabelPrefix}: {formatMaskedValue(signerWalletAddress)}
+                                </p>
+                                <CopyInlineButton
+                                  value={signerWalletAddress}
+                                  label="Copy signer wallet address"
+                                />
+                              </div>
+                            )}
                           </div>
                           <div>
                             <p className="text-white/50">Signature</p>
-                            <div className="mt-1 flex items-center gap-2">
-                              <p className="break-all font-mono">
-                                {formatMaskedValue(signerSignature)}
-                              </p>
-                              <CopyInlineButton value={signerSignature} label="Copy signature" />
-                            </div>
+                            {isRedemptionRequested ? (
+                              <div className="mt-1 space-y-2">
+                                <div className="flex items-center gap-2">
+                                  <p className="break-all font-mono">
+                                    owner signature: {formatMaskedValue(ownerSignerSignature)}
+                                  </p>
+                                  <CopyInlineButton
+                                    value={ownerSignerSignature}
+                                    label="Copy owner signature"
+                                  />
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <p className="break-all font-mono">
+                                    platform signature: {formatMaskedValue(platformSignerSignature)}
+                                  </p>
+                                  <CopyInlineButton
+                                    value={platformSignerSignature}
+                                    label="Copy platform signature"
+                                  />
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="mt-1 flex items-center gap-2">
+                                <p className="break-all font-mono">
+                                  {signatureLabelPrefix}: {formatMaskedValue(signerSignature)}
+                                </p>
+                                <CopyInlineButton value={signerSignature} label="Copy signature" />
+                              </div>
+                            )}
                           </div>
                         </div>
                       </details>
