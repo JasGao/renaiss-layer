@@ -26,5 +26,4 @@ export const NAV_ITEMS = [
   { href: "/cards", label: "My Cards", icon: "cards" as const },
   { href: "/deposit", label: "Deposit", icon: "deposit" as const },
   { href: "/redeem", label: "Redeem", icon: "redeem" as const },
-  { href: "/settings", label: "Settings", icon: "settings" as const },
 ] as const;

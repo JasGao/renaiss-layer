@@ -171,6 +171,29 @@ function formatMaskedValue(value: string) {
   return `${value.slice(0, 8)}…${value.slice(-6)}`;
 }
 
+function getVerificationEventFingerprint(event: OnChainActivityEvent) {
+  return [
+    event.sourceEvent ?? "",
+    event.verifyStatus ?? "",
+    event.actorRole ?? "",
+    event.actorAddress ?? "",
+    event.verifierAddress ?? "",
+    event.verifierSignature ?? "",
+    event.txHash ?? "",
+    event.proofUrl ?? "",
+    event.requestId ?? "",
+  ].join("|");
+}
+
+function getActivitySummaryMatchedEvent(
+  activityItem: ActivitySummaryItem,
+  events: OnChainActivityEvent[],
+) {
+  return activityItem.eventId
+    ? events.find((event) => event.id === activityItem.eventId)
+    : events.find((event) => event.type === activityItem.eventType);
+}
+
 export default async function CardDetailPage({
   params,
 }: {
@@ -187,26 +210,19 @@ export default async function CardDetailPage({
   const sortedEvents = [...activity].sort(
     (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime(),
   );
-  const verificationEvent = sortedEvents.find((event) => event.type === "verification_recorded");
-  const timelineEvents = verificationEvent
-    ? sortedEvents.filter((event) => event.id !== verificationEvent.id)
-    : sortedEvents;
-  const postVerificationEvents = timelineEvents.filter((event) =>
-    POST_VERIFICATION_ACTIVITY_TYPES.includes(event.type),
-  );
-  const verificationResultUrl = verificationEvent?.proofUrl
-    ? verificationEvent.proofUrl
-    : verificationEvent?.txHash
-      ? `https://basescan.org/tx/${verificationEvent.txHash}`
-      : null;
-  const verificationStatusDisplay =
-    verificationEvent?.verifyStatus === 1
-      ? "Approved"
-      : verificationEvent?.verifyStatus === 2
-        ? "Rejected"
-        : verificationEvent?.verifyStatus !== undefined
-          ? `${verificationEvent.verifyStatus}`
-          : MOCK_DISPLAY_FALLBACKS.verificationStatus;
+  const verificationHistoryEvents = sortedEvents
+    .filter((event) => event.type === "verification_recorded")
+    .filter((event, index, events) => {
+      const currentFingerprint = getVerificationEventFingerprint(event);
+      return (
+        events.findIndex(
+          (candidate) => getVerificationEventFingerprint(candidate) === currentFingerprint,
+        ) === index
+      );
+    })
+    .slice(0, 2);
+  const latestVerificationEvent = verificationHistoryEvents[0];
+  const custodyTimelineEvents = sortedEvents.filter((event) => event.type !== "verification_recorded");
   const configuredVaultDisplay = card.custody.currentVault?.name ?? "—";
   const isShipping =
     card.nft.status === "in_transit" ||
@@ -214,18 +230,18 @@ export default async function CardDetailPage({
   const vaultDisplay = isShipping ? "Shipping" : configuredVaultDisplay;
   const verifierDisplay =
     card.custody.protocolStatus === "RELOCATION_VAULT_RECEIVED" ? "YamaCardo" : "Legit App";
-  const verificationVerifierDisplay = verificationEvent?.actorRole?.toLowerCase().includes("yama")
+  const verificationVerifierDisplay = latestVerificationEvent?.actorRole?.toLowerCase().includes("yama")
     ? "YamaCardo"
-    : verificationEvent?.actorRole?.toLowerCase().includes("legit")
+    : latestVerificationEvent?.actorRole?.toLowerCase().includes("legit")
       ? "Legit App"
       : verifierDisplay;
   const verificationSignerWalletAddress =
-    verificationEvent?.actorAddress ??
-    verificationEvent?.verifierAddress ??
+    latestVerificationEvent?.actorAddress ??
+    latestVerificationEvent?.verifierAddress ??
     MOCK_DISPLAY_FALLBACKS.signerWalletAddress;
   const verificationSignature =
-    verificationEvent?.verifierSignature ?? MOCK_DISPLAY_FALLBACKS.signature;
-  const verificationTxHash = verificationEvent?.txHash ?? MOCK_DISPLAY_FALLBACKS.txHash;
+    latestVerificationEvent?.verifierSignature ?? MOCK_DISPLAY_FALLBACKS.signature;
+  const verificationTxHash = latestVerificationEvent?.txHash ?? MOCK_DISPLAY_FALLBACKS.txHash;
   const isRedeemed = card.nft.status === "redeemed";
   const physicalLocationDisplay = isRedeemed ? "-" : card.custody.currentVault?.countryCode ?? "US";
   const encryptedPhysicalAddressRaw =
@@ -245,6 +261,14 @@ export default async function CardDetailPage({
   const languageDisplay = card.language ?? MOCK_DISPLAY_FALLBACKS.language;
   const cardNumberDisplay = card.cardNumber ?? MOCK_DISPLAY_FALLBACKS.cardNumber;
   const activitySummaryConfig = ACTIVITY_SUMMARY_CONFIG_BY_CARD[card.id];
+  const sortedActivitySummaryConfig = activitySummaryConfig
+    ? [...activitySummaryConfig].sort((a, b) => {
+        const aTimestamp = getActivitySummaryMatchedEvent(a, sortedEvents)?.timestamp;
+        const bTimestamp = getActivitySummaryMatchedEvent(b, sortedEvents)?.timestamp;
+        return new Date(bTimestamp ?? MOCK_DISPLAY_FALLBACKS.timestamp).getTime() -
+          new Date(aTimestamp ?? MOCK_DISPLAY_FALLBACKS.timestamp).getTime();
+      })
+    : null;
 
   return (
     <div className="mx-auto max-w-6xl py-6 md:py-8">
@@ -348,320 +372,389 @@ export default async function CardDetailPage({
               </div>
             </div>
           </section>
+        </div>
+      </div>
+      <div className="mt-6 grid gap-6 lg:grid-cols-2">
+        <section className="rounded-xl border border-white/20 bg-brand-1000/40 p-4">
+          <p className="text-xs uppercase tracking-wide text-white/50">Verification Status</p>
+          {verificationHistoryEvents.length > 0 ? (
+            <div className="mt-4 space-y-4">
+              {verificationHistoryEvents.map((verificationEvent, index) => {
+                const verificationResultUrl = verificationEvent.proofUrl
+                  ? verificationEvent.proofUrl
+                  : verificationEvent.txHash
+                    ? `https://basescan.org/tx/${verificationEvent.txHash}`
+                    : null;
+                const verificationStatusDisplay =
+                  verificationEvent.verifyStatus === 1
+                    ? "Approved"
+                    : verificationEvent.verifyStatus === 2
+                      ? "Rejected"
+                      : verificationEvent.verifyStatus !== undefined
+                        ? `${verificationEvent.verifyStatus}`
+                        : MOCK_DISPLAY_FALLBACKS.verificationStatus;
+                const currentVerificationSignerWalletAddress =
+                  verificationEvent.actorAddress ??
+                  verificationEvent.verifierAddress ??
+                  verificationSignerWalletAddress;
+                const currentVerificationSignature =
+                  verificationEvent.verifierSignature ?? verificationSignature;
+                const currentVerificationTxHash = verificationEvent.txHash ?? verificationTxHash;
+                const currentVerificationVerifierDisplay =
+                  verificationEvent.actorRole?.toLowerCase().includes("yama")
+                    ? "YamaCardo"
+                    : verificationEvent.actorRole?.toLowerCase().includes("legit")
+                      ? "Legit App"
+                      : verificationVerifierDisplay;
 
-          <section className="rounded-xl border border-white/20 bg-brand-1000/40 p-4">
-            <p className="text-xs uppercase tracking-wide text-white/50">On-Chain Activity</p>
-            <div className="mt-4 rounded-xl bg-rainbow p-px shadow-[0_0_24px_rgba(130,96,255,0.35)]">
-              <section className="rounded-xl bg-brand p-4">
-                <p className="text-xs uppercase tracking-wide text-white/50">Verification</p>
-                {verificationEvent ? (
-                  <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                    <div>
-                      <p className="text-xs text-white/50">Source event</p>
-                      <p className="mt-1 text-sm">{verificationEvent.sourceEvent ?? "verification_recorded"}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-white/50">Status</p>
-                      <p className="mt-1 text-sm font-medium">{verificationStatusDisplay}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-white/50">Verifier</p>
-                      <p className="mt-1 text-sm font-medium">{verificationVerifierDisplay}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-white/50">Verified at</p>
-                      <p className="mt-1 text-sm font-medium">
-                        {formatDateTime(verificationEvent.timestamp)}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-white/50">Tx Hash</p>
-                      <div className="mt-1 flex items-center gap-2">
-                        <p className="font-mono text-sm">{truncateAddress(verificationTxHash, 6)}</p>
-                        <CopyInlineButton value={verificationTxHash} label="Copy tx hash" />
-                      </div>
-                    </div>
-                    <div className="sm:col-span-2">
-                      <p className="text-xs text-white/50">Verifier comments</p>
-                      <p className="mt-1 overflow-hidden text-ellipsis whitespace-nowrap text-sm text-white/80">
-                        {verificationResultUrl ? (
-                          <>
-                            <span>Authentic </span>
-                            <a
-                              href={verificationResultUrl}
-                              target="_blank"
-                              rel="noreferrer"
-                              title={verificationResultUrl}
-                              className="underline decoration-white/40 underline-offset-2 hover:text-white"
-                            >
-                              {verificationResultUrl}
-                            </a>
-                          </>
-                        ) : (
-                          "Verifier comments link unavailable"
-                        )}
-                      </p>
-                    </div>
-                    <div className="sm:col-span-2">
-                      <details className="mt-1 rounded-md border border-white/15 bg-brand/30 p-3">
-                        <summary className="cursor-pointer text-[11px] uppercase tracking-wide text-white/70">
-                          Details
-                        </summary>
-                        <div className="mt-3 grid gap-2 text-xs text-white/70">
-                          <div>
-                            <p className="text-white/50">Signer Wallet Address</p>
-                            <div className="mt-1 flex items-center gap-2">
-                              <p className="break-all font-mono">
-                                verifier (legit app): {formatMaskedValue(verificationSignerWalletAddress)}
-                              </p>
-                              <CopyInlineButton
-                                value={verificationSignerWalletAddress}
-                                label="Copy signer wallet address"
-                              />
-                            </div>
-                          </div>
-                          <div>
-                            <p className="text-white/50">Signature</p>
-                            <div className="mt-1 flex items-center gap-2">
-                              <p className="break-all font-mono">
-                                verifier signature: {formatMaskedValue(verificationSignature)}
-                              </p>
-                              <CopyInlineButton value={verificationSignature} label="Copy signature" />
-                            </div>
-                          </div>
-                        </div>
-                      </details>
-                    </div>
-                  </div>
-                ) : (
-                  <p className="mt-3 text-sm text-white/50">No verification record available yet.</p>
-                )}
-              </section>
-            </div>
-            {activitySummaryConfig ? (
-              <div className="mt-4 space-y-3">
-                {activitySummaryConfig.map((activityItem, index) => {
-                  const matchedEvent = activityItem.eventId
-                    ? sortedEvents.find((event) => event.id === activityItem.eventId)
-                    : sortedEvents.find((event) => event.type === activityItem.eventType);
-                  const isRelocationShipped =
-                    activityItem.status === "RELOCATION_VAULT_DISPATCHED";
-                  const isRelocationCancelled =
-                    activityItem.status === "RELOCATION_PLATFORM_CANCELED";
-                  const signerWalletAddress =
-                    matchedEvent?.actorAddress ??
-                    matchedEvent?.verifierAddress ??
-                    MOCK_DISPLAY_FALLBACKS.signerWalletAddress;
-                  const signerSignature =
-                    matchedEvent?.verifierSignature ?? MOCK_DISPLAY_FALLBACKS.signature;
-                  const vaultDisplay =
-                    matchedEvent?.vaultTo ?? matchedEvent?.vaultFrom ?? MOCK_DISPLAY_FALLBACKS.vaultName;
-                  const activityVaultFrom =
-                    matchedEvent?.vaultFrom ?? matchedEvent?.vaultTo ?? MOCK_DISPLAY_FALLBACKS.vaultName;
-                  const activityVaultTo =
-                    matchedEvent?.vaultTo ?? matchedEvent?.vaultFrom ?? MOCK_DISPLAY_FALLBACKS.vaultName;
-                  const activityRequestId = matchedEvent?.requestId ?? MOCK_DISPLAY_FALLBACKS.requestId;
-                  const activityTxHash = matchedEvent?.txHash ?? MOCK_DISPLAY_FALLBACKS.txHash;
-                  const activityTimestamp = matchedEvent?.timestamp ?? MOCK_DISPLAY_FALLBACKS.timestamp;
-                  const isRedemptionRequested =
-                    activityItem.status === "REDEMPTION_OWNER_REQUESTED";
-                  const ownerSignerWalletAddress =
-                    matchedEvent?.actorAddress ??
-                    matchedEvent?.verifierAddress ??
-                    MOCK_DISPLAY_FALLBACKS.signerWalletAddress;
-                  const platformSignerWalletAddress =
-                    matchedEvent?.verifierAddress ??
-                    matchedEvent?.actorAddress ??
-                    MOCK_DISPLAY_FALLBACKS.signerWalletAddress;
-                  const ownerSignerSignature =
-                    matchedEvent?.verifierSignature ?? MOCK_DISPLAY_FALLBACKS.signature;
-                  const platformSignerSignature =
-                    matchedEvent?.verifierSignature ?? MOCK_DISPLAY_FALLBACKS.signature;
-                  const signerLabelPrefix =
-                    activityItem.status === "DEPOSIT_OWNER_INITIATED"
-                      ? "user"
-                      : isRelocationShipped || isRelocationCancelled
-                        ? `vault (${activityVaultFrom})`
-                        : "vault (yamacardo)";
-                  const signatureLabelPrefix =
-                    activityItem.status === "DEPOSIT_OWNER_INITIATED"
-                      ? "user signature"
-                      : "vault signature";
-
-                  return (
-                    <div
-                      key={`${activityItem.status}-${activityItem.eventType}-${activityItem.eventId ?? index}`}
-                      className="rounded-lg border border-white/10 bg-brand/40 p-3"
-                    >
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="flex items-start gap-2">
-                          <span className="mt-1 h-2 w-2 rounded-full bg-primary" />
-                          <p className="text-sm font-medium">{activityItem.label}</p>
-                        </div>
-                        <span className="shrink-0 text-xs text-white/50">
-                          {formatDateTime(activityTimestamp)}
-                        </span>
-                      </div>
-                      <div className="mt-3 grid gap-2 text-xs text-white/70 sm:grid-cols-2">
-                        <div>
-                          <p className="text-white/50">Request ID</p>
-                          <div className="mt-1 flex items-center gap-2">
-                            <p className="font-mono">{formatRequestId(activityRequestId)}</p>
-                            <CopyInlineButton
-                              value={activityRequestId}
-                              label="Copy request ID"
-                            />
-                          </div>
-                        </div>
-                        <div>
-                          <p className="text-white/50">Status</p>
-                          <p className="mt-1 font-mono">{activityItem.status}</p>
-                        </div>
-                        {isRelocationShipped ? (
-                          <>
-                            <div>
-                              <p className="text-white/50">From Vault</p>
-                              <p className="mt-1">{activityVaultFrom}</p>
-                            </div>
-                            <div>
-                              <p className="text-white/50">To Vault</p>
-                              <p className="mt-1">{activityVaultTo}</p>
-                            </div>
-                          </>
-                        ) : activityItem.status !== "DEPOSIT_OWNER_INITIATED" ? (
-                          <div>
-                            <p className="text-white/50">Vault</p>
-                            <p className="mt-1">{vaultDisplay}</p>
-                          </div>
-                        ) : null}
-                        <div>
-                          <p className="text-white/50">Tx Hash</p>
-                          <div className="mt-1 flex items-center gap-2">
-                            <p className="font-mono">{truncateAddress(activityTxHash, 6)}</p>
-                            <CopyInlineButton value={activityTxHash} label="Copy tx hash" />
-                          </div>
-                        </div>
-                      </div>
-                      <details className="mt-3 rounded-md border border-white/15 bg-brand/30 p-3">
-                        <summary className="cursor-pointer text-[11px] uppercase tracking-wide text-white/70">
-                          Details
-                        </summary>
-                        <div className="mt-3 grid gap-2 text-xs text-white/70">
-                          <div>
-                            <p className="text-white/50">Signer Wallet Address</p>
-                            {isRedemptionRequested ? (
-                              <div className="mt-1 space-y-2">
-                                <div className="flex items-center gap-2">
-                                  <p className="break-all font-mono">
-                                    owner: {formatMaskedValue(ownerSignerWalletAddress)}
-                                  </p>
-                                  <CopyInlineButton
-                                    value={ownerSignerWalletAddress}
-                                    label="Copy owner signer wallet address"
-                                  />
-                                </div>
-                                <div className="flex items-center gap-2">
-                                  <p className="break-all font-mono">
-                                    platform: {formatMaskedValue(platformSignerWalletAddress)}
-                                  </p>
-                                  <CopyInlineButton
-                                    value={platformSignerWalletAddress}
-                                    label="Copy platform signer wallet address"
-                                  />
-                                </div>
-                              </div>
-                            ) : (
-                              <div className="mt-1 flex items-center gap-2">
-                                <p className="break-all font-mono">
-                                  {signerLabelPrefix}: {formatMaskedValue(signerWalletAddress)}
-                                </p>
-                                <CopyInlineButton
-                                  value={signerWalletAddress}
-                                  label="Copy signer wallet address"
-                                />
-                              </div>
-                            )}
-                          </div>
-                          <div>
-                            <p className="text-white/50">Signature</p>
-                            {isRedemptionRequested ? (
-                              <div className="mt-1 space-y-2">
-                                <div className="flex items-center gap-2">
-                                  <p className="break-all font-mono">
-                                    owner signature: {formatMaskedValue(ownerSignerSignature)}
-                                  </p>
-                                  <CopyInlineButton
-                                    value={ownerSignerSignature}
-                                    label="Copy owner signature"
-                                  />
-                                </div>
-                                <div className="flex items-center gap-2">
-                                  <p className="break-all font-mono">
-                                    platform signature: {formatMaskedValue(platformSignerSignature)}
-                                  </p>
-                                  <CopyInlineButton
-                                    value={platformSignerSignature}
-                                    label="Copy platform signature"
-                                  />
-                                </div>
-                              </div>
-                            ) : (
-                              <div className="mt-1 flex items-center gap-2">
-                                <p className="break-all font-mono">
-                                  {signatureLabelPrefix}: {formatMaskedValue(signerSignature)}
-                                </p>
-                                <CopyInlineButton value={signerSignature} label="Copy signature" />
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      </details>
-                    </div>
-                  );
-                })}
-              </div>
-            ) : (verificationEvent ? postVerificationEvents : timelineEvents).length === 0 ? (
-              <p className="mt-3 text-sm text-white/50">
-                {verificationEvent
-                  ? "No additional post-verification on-chain activities available yet."
-                  : "No indexed events available for this card yet."}
-              </p>
-            ) : (
-              <div className="mt-4 space-y-3">
-                {(verificationEvent ? postVerificationEvents : timelineEvents).map((event) => (
+                return (
                   <div
-                    key={event.id}
-                    className="rounded-lg border border-white/10 bg-brand/40 p-3"
+                    key={verificationEvent.id}
+                    className={
+                      index === 0
+                        ? "rounded-xl bg-rainbow p-px shadow-[0_0_24px_rgba(130,96,255,0.35)]"
+                        : "rounded-xl border border-white/20 bg-brand p-4"
+                    }
                   >
+                    <section className={index === 0 ? "rounded-xl bg-brand p-4" : ""}>
+                      <p className="text-xs uppercase tracking-wide text-white/50">Verification</p>
+                      <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                        <div>
+                          <p className="text-xs text-white/50">Source event</p>
+                          <p className="mt-1 text-sm">{verificationEvent.sourceEvent ?? "verification_recorded"}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-white/50">Status</p>
+                          <p className="mt-1 text-sm font-medium">{verificationStatusDisplay}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-white/50">Verifier</p>
+                          <p className="mt-1 text-sm font-medium">{currentVerificationVerifierDisplay}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-white/50">Verified at</p>
+                          <p className="mt-1 text-sm font-medium">{formatDateTime(verificationEvent.timestamp)}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-white/50">Tx Hash</p>
+                          <div className="mt-1 flex items-center gap-2">
+                            <p className="font-mono text-sm">{truncateAddress(currentVerificationTxHash, 6)}</p>
+                            <CopyInlineButton value={currentVerificationTxHash} label="Copy tx hash" />
+                          </div>
+                        </div>
+                        <div className="sm:col-span-2">
+                          <p className="text-xs text-white/50">Verifier comments</p>
+                          <p className="mt-1 overflow-hidden text-ellipsis whitespace-nowrap text-sm text-white/80">
+                            {verificationResultUrl ? (
+                              <>
+                                <span>Authentic </span>
+                                <a
+                                  href={verificationResultUrl}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  title={verificationResultUrl}
+                                  className="underline decoration-white/40 underline-offset-2 hover:text-white"
+                                >
+                                  {verificationResultUrl}
+                                </a>
+                              </>
+                            ) : (
+                              "Verifier comments link unavailable"
+                            )}
+                          </p>
+                        </div>
+                        <div className="sm:col-span-2">
+                          <details className="mt-1 rounded-md border border-white/15 bg-brand/30 p-3">
+                            <summary className="cursor-pointer text-[11px] uppercase tracking-wide text-white/70">
+                              Details
+                            </summary>
+                            <div className="mt-3 grid gap-2 text-xs text-white/70">
+                              <div>
+                                <p className="text-white/50">Signer Wallet Address</p>
+                                <div className="mt-1 flex items-center gap-2">
+                                  <p className="break-all font-mono">
+                                    verifier (legit app): {formatMaskedValue(currentVerificationSignerWalletAddress)}
+                                  </p>
+                                  <CopyInlineButton
+                                    value={currentVerificationSignerWalletAddress}
+                                    label="Copy signer wallet address"
+                                  />
+                                </div>
+                              </div>
+                              <div>
+                                <p className="text-white/50">Signature</p>
+                                <div className="mt-1 flex items-center gap-2">
+                                  <p className="break-all font-mono">
+                                    verifier signature: {formatMaskedValue(currentVerificationSignature)}
+                                  </p>
+                                  <CopyInlineButton value={currentVerificationSignature} label="Copy signature" />
+                                </div>
+                              </div>
+                            </div>
+                          </details>
+                        </div>
+                      </div>
+                    </section>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <p className="mt-3 text-sm text-white/50">No verification record available yet.</p>
+          )}
+        </section>
+        <section className="rounded-xl border border-white/20 bg-brand-1000/40 p-4">
+          <p className="text-xs uppercase tracking-wide text-white/50">Custody Status</p>
+          {sortedActivitySummaryConfig ? (
+            <div className="mt-4 space-y-3">
+              {sortedActivitySummaryConfig.map((activityItem, index) => {
+                const matchedEvent = getActivitySummaryMatchedEvent(activityItem, sortedEvents);
+                const isRelocationShipped =
+                  activityItem.status === "RELOCATION_VAULT_DISPATCHED";
+                const isRelocationReceived =
+                  activityItem.status === "RELOCATION_VAULT_RECEIVED";
+                const isRelocationCancelled =
+                  activityItem.status === "RELOCATION_PLATFORM_CANCELED";
+                const signerWalletAddress =
+                  matchedEvent?.actorAddress ??
+                  matchedEvent?.verifierAddress ??
+                  MOCK_DISPLAY_FALLBACKS.signerWalletAddress;
+                const signerSignature =
+                  matchedEvent?.verifierSignature ?? MOCK_DISPLAY_FALLBACKS.signature;
+                const vaultDisplay = isRelocationCancelled
+                  ? matchedEvent?.vaultFrom ??
+                    matchedEvent?.vaultTo ??
+                    MOCK_DISPLAY_FALLBACKS.vaultName
+                  : matchedEvent?.vaultTo ??
+                    matchedEvent?.vaultFrom ??
+                    MOCK_DISPLAY_FALLBACKS.vaultName;
+                const activityVaultFrom =
+                  matchedEvent?.vaultFrom ?? matchedEvent?.vaultTo ?? MOCK_DISPLAY_FALLBACKS.vaultName;
+                const activityVaultTo =
+                  matchedEvent?.vaultTo ?? matchedEvent?.vaultFrom ?? MOCK_DISPLAY_FALLBACKS.vaultName;
+                const activityRequestId = matchedEvent?.requestId ?? MOCK_DISPLAY_FALLBACKS.requestId;
+                const activityTxHash = matchedEvent?.txHash ?? MOCK_DISPLAY_FALLBACKS.txHash;
+                const activityTimestamp = matchedEvent?.timestamp ?? MOCK_DISPLAY_FALLBACKS.timestamp;
+                const isRedemptionRequested =
+                  activityItem.status === "REDEMPTION_OWNER_REQUESTED";
+                const isPikachuRelocationShipped =
+                  card.id === "card-pikachu" && isRelocationShipped;
+                const ownerSignerWalletAddress =
+                  matchedEvent?.actorAddress ??
+                  matchedEvent?.verifierAddress ??
+                  MOCK_DISPLAY_FALLBACKS.signerWalletAddress;
+                const platformSignerWalletAddress =
+                  matchedEvent?.platformSignerAddress ??
+                  matchedEvent?.verifierAddress ??
+                  matchedEvent?.actorAddress ??
+                  MOCK_DISPLAY_FALLBACKS.signerWalletAddress;
+                const ownerSignerSignature =
+                  matchedEvent?.verifierSignature ?? MOCK_DISPLAY_FALLBACKS.signature;
+                const platformSignerSignature =
+                  matchedEvent?.platformSignerSignature ??
+                  matchedEvent?.verifierSignature ??
+                  MOCK_DISPLAY_FALLBACKS.signature;
+                const signerLabelPrefix =
+                  activityItem.status === "DEPOSIT_OWNER_INITIATED"
+                    ? "user"
+                    : isRelocationShipped || isRelocationCancelled
+                      ? `vault (${activityVaultFrom})`
+                      : isRelocationReceived
+                        ? `vault (${activityVaultTo})`
+                      : "vault (yamacardo)";
+                const signatureLabelPrefix =
+                  activityItem.status === "DEPOSIT_OWNER_INITIATED"
+                    ? "user signature"
+                    : "vault signature";
+
+                return (
+                  <div
+                    key={`${activityItem.status}-${activityItem.eventType}-${activityItem.eventId ?? index}`}
+                    className={
+                      index === 0
+                        ? "rounded-xl bg-rainbow p-px shadow-[0_0_24px_rgba(130,96,255,0.35)]"
+                        : "rounded-lg border border-white/10 bg-brand/40 p-3"
+                    }
+                  >
+                    <div className={index === 0 ? "rounded-xl bg-brand p-4" : ""}>
                     <div className="flex items-start justify-between gap-3">
                       <div className="flex items-start gap-2">
                         <span className="mt-1 h-2 w-2 rounded-full bg-primary" />
-                        <div>
-                          <p className="text-sm font-medium">
-                            {EVENT_LABELS[event.type]}
-                          </p>
-                          <p className="text-xs text-white/60">{event.description}</p>
-                        </div>
+                        <p className="text-sm font-medium">{activityItem.label}</p>
                       </div>
                       <span className="shrink-0 text-xs text-white/50">
-                        {formatDateTime(event.timestamp)}
+                        {formatDateTime(activityTimestamp)}
                       </span>
                     </div>
-                    <div className="mt-2 grid gap-1 text-xs text-white/50 sm:grid-cols-2">
-                      {event.actorRole ? <p>Role: {event.actorRole}</p> : null}
-                      {event.requestId ? <p>Request: {event.requestId}</p> : null}
-                      {event.vaultFrom ? <p>From: {event.vaultFrom}</p> : null}
-                      {event.vaultTo ? <p>To: {event.vaultTo}</p> : null}
-                      {event.txHash ? (
-                        <p className="font-mono">Tx: {truncateAddress(event.txHash, 6)}</p>
+                    <div className="mt-3 grid gap-2 text-xs text-white/70 sm:grid-cols-2">
+                      <div>
+                        <p className="text-white/50">Request ID</p>
+                        <div className="mt-1 flex items-center gap-2">
+                          <p className="font-mono">{formatRequestId(activityRequestId)}</p>
+                          <CopyInlineButton
+                            value={activityRequestId}
+                            label="Copy request ID"
+                          />
+                        </div>
+                      </div>
+                      <div>
+                        <p className="text-white/50">Status</p>
+                        <p className="mt-1 font-mono">{activityItem.status}</p>
+                      </div>
+                      {isRelocationShipped ? (
+                        <>
+                          <div>
+                            <p className="text-white/50">From Vault</p>
+                            <p className="mt-1">{activityVaultFrom}</p>
+                          </div>
+                          <div>
+                            <p className="text-white/50">To Vault</p>
+                            <p className="mt-1">{activityVaultTo}</p>
+                          </div>
+                        </>
+                      ) : activityItem.status !== "DEPOSIT_OWNER_INITIATED" ? (
+                        <div>
+                          <p className="text-white/50">Vault</p>
+                          <p className="mt-1">{vaultDisplay}</p>
+                        </div>
                       ) : null}
+                      <div>
+                        <p className="text-white/50">Tx Hash</p>
+                        <div className="mt-1 flex items-center gap-2">
+                          <p className="font-mono">{truncateAddress(activityTxHash, 6)}</p>
+                          <CopyInlineButton value={activityTxHash} label="Copy tx hash" />
+                        </div>
+                      </div>
+                    </div>
+                    <details className="mt-3 rounded-md border border-white/15 bg-brand/30 p-3">
+                      <summary className="cursor-pointer text-[11px] uppercase tracking-wide text-white/70">
+                        Details
+                      </summary>
+                      <div className="mt-3 grid gap-2 text-xs text-white/70">
+                        <div>
+                          <p className="text-white/50">Signer Wallet Address</p>
+                          {isRedemptionRequested || isPikachuRelocationShipped ? (
+                            <div className="mt-1 space-y-2">
+                              <div className="flex items-center gap-2">
+                                <p className="break-all font-mono">
+                                  {isRedemptionRequested
+                                    ? "owner"
+                                    : `vault (${activityVaultFrom})`}
+                                  :{" "}
+                                  {formatMaskedValue(ownerSignerWalletAddress)}
+                                </p>
+                                <CopyInlineButton
+                                  value={ownerSignerWalletAddress}
+                                  label={
+                                    isRedemptionRequested
+                                      ? "Copy owner signer wallet address"
+                                      : "Copy yamacardo signer wallet address"
+                                  }
+                                />
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <p className="break-all font-mono">
+                                  platform: {formatMaskedValue(platformSignerWalletAddress)}
+                                </p>
+                                <CopyInlineButton
+                                  value={platformSignerWalletAddress}
+                                  label="Copy platform signer wallet address"
+                                />
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="mt-1 flex items-center gap-2">
+                              <p className="break-all font-mono">
+                                {signerLabelPrefix}: {formatMaskedValue(signerWalletAddress)}
+                              </p>
+                              <CopyInlineButton
+                                value={signerWalletAddress}
+                                label="Copy signer wallet address"
+                              />
+                            </div>
+                          )}
+                        </div>
+                        <div>
+                          <p className="text-white/50">Signature</p>
+                          {isRedemptionRequested || isPikachuRelocationShipped ? (
+                            <div className="mt-1 space-y-2">
+                              <div className="flex items-center gap-2">
+                                <p className="break-all font-mono">
+                                  {isRedemptionRequested ? "owner" : "yamacardo"} signature:{" "}
+                                  {formatMaskedValue(ownerSignerSignature)}
+                                </p>
+                                <CopyInlineButton
+                                  value={ownerSignerSignature}
+                                  label={
+                                    isRedemptionRequested
+                                      ? "Copy owner signature"
+                                      : "Copy yamacardo signature"
+                                  }
+                                />
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <p className="break-all font-mono">
+                                  platform signature: {formatMaskedValue(platformSignerSignature)}
+                                </p>
+                                <CopyInlineButton
+                                  value={platformSignerSignature}
+                                  label="Copy platform signature"
+                                />
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="mt-1 flex items-center gap-2">
+                              <p className="break-all font-mono">
+                                {signatureLabelPrefix}: {formatMaskedValue(signerSignature)}
+                              </p>
+                              <CopyInlineButton value={signerSignature} label="Copy signature" />
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </details>
                     </div>
                   </div>
-                ))}
-              </div>
-            )}
-          </section>
-        </div>
+                );
+              })}
+            </div>
+          ) : custodyTimelineEvents.length === 0 ? (
+            <p className="mt-3 text-sm text-white/50">No indexed custody activities available yet.</p>
+          ) : (
+            <div className="mt-4 space-y-3">
+              {custodyTimelineEvents.map((event) => (
+                <div
+                  key={event.id}
+                  className="rounded-lg border border-white/10 bg-brand/40 p-3"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-start gap-2">
+                      <span className="mt-1 h-2 w-2 rounded-full bg-primary" />
+                      <div>
+                        <p className="text-sm font-medium">
+                          {EVENT_LABELS[event.type]}
+                        </p>
+                        <p className="text-xs text-white/60">{event.description}</p>
+                      </div>
+                    </div>
+                    <span className="shrink-0 text-xs text-white/50">
+                      {formatDateTime(event.timestamp)}
+                    </span>
+                  </div>
+                  <div className="mt-2 grid gap-1 text-xs text-white/50 sm:grid-cols-2">
+                    {event.actorRole ? <p>Role: {event.actorRole}</p> : null}
+                    {event.requestId ? <p>Request: {event.requestId}</p> : null}
+                    {event.vaultFrom ? <p>From: {event.vaultFrom}</p> : null}
+                    {event.vaultTo ? <p>To: {event.vaultTo}</p> : null}
+                    {event.txHash ? (
+                      <p className="font-mono">Tx: {truncateAddress(event.txHash, 6)}</p>
+                    ) : null}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
       </div>
     </div>
   );

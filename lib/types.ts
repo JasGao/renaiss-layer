@@ -129,6 +129,8 @@ export type OnChainActivityEvent = {
   verifierAddress?: string;
   verifyStatus?: number;
   verifierSignature?: string;
+  platformSignerAddress?: string;
+  platformSignerSignature?: string;
   proofUrl?: string;
   vaultFrom?: string;
   vaultTo?: string;
