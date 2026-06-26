@@ -20,4 +20,6 @@ export const RENAISS_CARD_IMAGES = {
   rayquaza: renaissGradedCardImage("PSA127811223"),
   gengar: renaissGradedCardImage("PSA112732317", "nft_image_diamond"),
   eevee: renaissGradedCardImage("PSA109339927"),
+  playingInTheSeaPikachu: "/nft_image_golden.webp",
+  acerolasPremonition: "/card2.webp",
 } as const;

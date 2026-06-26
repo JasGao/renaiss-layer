@@ -66,6 +66,70 @@ export const MOCK_CARDS: LayerCard[] = [
     latestActivityAt: "2026-06-22T09:15:00Z",
   },
   {
+    id: "card-playing-in-the-sea-pikachu",
+    tokenId: "11600077186816976043142572353758114075777111188906638644398252514824832193351",
+    name: "Playing in the Sea Pikachu",
+    imageUrl: RENAISS_CARD_IMAGES.playingInTheSeaPikachu,
+    year: 2019,
+    language: "Japanese",
+    setName: "Pokemon Japanese Sm Promo",
+    cardNumber: "392",
+    category: "pokemon",
+    gradingCompany: "PSA",
+    grade: "10 Gem Mint",
+    certificationNumber: "PSA151616546",
+    chainId: 8453,
+    nftContractAddress: PROTOCOL_ADDRESSES.nftContract,
+    nft: {
+      status: "in_vault",
+      ownerAddress: "0x48FBb6eaA5f8ba3068562B7518b970B32CA7fA8E",
+      ownerLabel: "You",
+    },
+    custody: {
+      currentVault: {
+        ...VAULTS.hongKong,
+        name: "Yamacardo Vault",
+        safeAddress:
+          "B277520CC49D2F05860CD23C009C3E0D42F08F0999F70ADCAB39B852FADA5C97CB213C699FD89814A4A496673E20C15745449E781392D6A437306282514FB005EC151288D4014C1BAB256F562F5278",
+      },
+      protocolStatus: "DEPOSIT_VAULT_RECEIVED",
+    },
+    redeemable: true,
+    latestActivityAt: "2026-06-26T10:27:06Z",
+  },
+  {
+    id: "card-acerolas-premonition",
+    tokenId: "72208439779716796881456983975101574059729788325677780970660741320469734825254",
+    name: "Acerola's Prmntn.",
+    imageUrl: RENAISS_CARD_IMAGES.acerolasPremonition,
+    year: 2021,
+    language: "Japanese",
+    setName: "Pokemon Japanese Sword & Shield Vmax Climax",
+    cardNumber: "255",
+    category: "pokemon",
+    gradingCompany: "PSA",
+    grade: "10 Gem Mint",
+    certificationNumber: "PSA101486177",
+    chainId: 8453,
+    nftContractAddress: PROTOCOL_ADDRESSES.nftContract,
+    nft: {
+      status: "in_vault",
+      ownerAddress: "0x207951b73f0960572160aEBF0c0419323F30F192",
+      ownerLabel: "You",
+    },
+    custody: {
+      currentVault: {
+        ...VAULTS.hongKong,
+        name: "Yamacardo Vault",
+        safeAddress:
+          "B277520CC49D2F05860CD23C009C3E0D42F08F0999F70ADCAB39B852FADA5C97CB213C699FD89814A4A496673E20C15745449E781392D6A437306282514FB005EC151288D4014C1BAB256F562F5278",
+      },
+      protocolStatus: "RELOCATION_VAULT_RECEIVED",
+    },
+    redeemable: true,
+    latestActivityAt: "2026-05-21T13:58:10Z",
+  },
+  {
     id: "card-hooh",
     tokenId: "79231076852774006958229876952072361912714928956049120690326948509881775336910",
     fmv: 2850,
@@ -463,6 +527,112 @@ export const MOCK_ONCHAIN_ACTIVITY: Record<string, OnChainActivityEvent[]> = {
       tokenId: "79231076852774006958229876952072361912714928956049120690326948509881775336909",
       txHash: "0xreloc123",
       description: "Source vault signed transfer out to Collector Crypt Vault.",
+    },
+  ],
+  "card-playing-in-the-sea-pikachu": [
+    {
+      id: "evt-playing-sea-verification",
+      type: "verification_recorded",
+      timestamp: "2026-06-26T10:27:06Z",
+      actorRole: "Yamacardo verifier",
+      sourceEvent: "Inspected",
+      verifierAddress: "0x79b19B6cE049Ab075f3E19519fdF4a29D0148EA8",
+      verifyStatus: 1,
+      verifierSignature:
+        "78A475AED0C535F3171045854716F359F905C57B8177D2F399DF5B916CA85F003BD507F05E31084C4CF45AC4B0F66AD22B8E56A4D3878F64B90C5D1BEF9F7E1F1B",
+      hideVerifierComments: true,
+      requestId:
+        "01277C1C7BB3874ACE5F48000B90E394064EE07653B971146D58E7D4CC609F7C",
+      tokenId:
+        "11600077186816976043142572353758114075777111188906638644398252514824832193351",
+      txHash: "0x45a2de2f27bdd3bdce327388184539ab76d493f3eeacec0a73a627ed36ff2d33",
+      description: "Verification completed successfully.",
+    },
+    {
+      id: "evt-playing-sea-vault-received",
+      type: "vault_received_deposit",
+      timestamp: "2026-06-26T10:27:06Z",
+      actorAddress: "0x79b19B6cE049Ab075f3E19519fdF4a29D0148EA8",
+      actorRole: "Vault signer",
+      vaultTo: "Yamacardo Vault",
+      verifierSignature:
+        "0522BD59F1D45310A939F673E41B4460E75F7324DA5BFB7A89795799EC6ECA461A27F200C2303F7648C4CB018EDEEDDFB15CD133D615D88E88FA7CFED42FD2391C",
+      requestId:
+        "01277C1C7BB3874ACE5F48000B90E394064EE07653B971146D58E7D4CC609F7C",
+      tokenId:
+        "11600077186816976043142572353758114075777111188906638644398252514824832193351",
+      txHash: "0x45a2de2f27bdd3bdce327388184539ab76d493f3eeacec0a73a627ed36ff2d33",
+      description: "Vault signed that the deposited card was received.",
+    },
+  ],
+  "card-acerolas-premonition": [
+    {
+      id: "evt-acerola-verification",
+      type: "verification_recorded",
+      timestamp: "2026-03-26T06:17:43Z",
+      actorRole: "Hoopi verifier",
+      sourceEvent: "Inspected",
+      verifierAddress: "0x4ab49592534f933e9545fa6b2b1ed41aef05258a",
+      verifyStatus: 1,
+      verifierSignature:
+        "55C1993551059C7FF826407785CE17905DE896318DFC596C2A566B1C96DAE2B728BE1D41D10E82329B766E3054B786DFC1A150A75A68795CEB6EAB3EAE1B6A471C",
+      hideVerifierComments: true,
+      requestId:
+        "07EF1C70416711C63CE82C1AC9E2BE07B05762D0B2E8FE5C167DBC921D204F57",
+      tokenId:
+        "72208439779716796881456983975101574059729788325677780970660741320469734825254",
+      txHash: "0x47a03828fb77b53e87ec90685f90c8dfb54a22758719e9dd892bee603f8c6982",
+      description: "Verification completed successfully.",
+    },
+    {
+      id: "evt-acerola-vault-received",
+      type: "vault_received_deposit",
+      timestamp: "2026-03-26T06:17:43Z",
+      actorAddress: "0x4ab49592534f933e9545fa6b2b1ed41aef05258a",
+      actorRole: "Vault signer",
+      vaultTo: "Hoopi Vault",
+      verifierSignature:
+        "E9461C0A8C5D3BCAFAD230F90190EC1BEC2581906E67C23F24B3997F6896AF625426435AE087B231DCD46BED3FF3BC3D00B221C93EE3FEBEA691E842A9F7EEAC1C",
+      requestId:
+        "07EF1C70416711C63CE82C1AC9E2BE07B05762D0B2E8FE5C167DBC921D204F57",
+      tokenId:
+        "72208439779716796881456983975101574059729788325677780970660741320469734825254",
+      txHash: "0x47a03828fb77b53e87ec90685f90c8dfb54a22758719e9dd892bee603f8c6982",
+      description: "Hoopi Vault signed that the deposited card was received.",
+    },
+    {
+      id: "evt-acerola-relocation-shipped",
+      type: "relocation_started",
+      timestamp: "2026-05-21T13:57:40Z",
+      actorAddress: "0x4ab49592534F933e9545fa6B2B1Ed41AEF05258A",
+      actorRole: "Relocation signer",
+      vaultFrom: "Hoopi Vault",
+      vaultTo: "Yamacardo Vault",
+      verifierSignature:
+        "9FFFBCD82673872DBCDD81B49564BA0964FB82A0B06265A6ADF7C047434B04A0198F0EB31DE48405F80643066E99524485EF1FE6AD0B4354BC36614072711A781B",
+      requestId:
+        "AC6A3B8BB3FE3A48BAB81F2E2178E17334C5F1B34626547507C4408B7DE5EF79",
+      tokenId:
+        "72208439779716796881456983975101574059729788325677780970660741320469734825254",
+      txHash: "0x35f30a3d8bdc43024323153920e64598993dc8dbe5b4439d1c7742a5711c0d10",
+      description: "Hoopi Vault signed transfer out to Yamacardo Vault.",
+    },
+    {
+      id: "evt-acerola-relocation-received",
+      type: "relocation_received",
+      timestamp: "2026-05-23T21:58:00Z",
+      actorAddress: "0x79b19B6cE049Ab075f3E19519fdF4a29D0148EA8",
+      actorRole: "Vault signer",
+      vaultFrom: "Hoopi Vault",
+      vaultTo: "Yamacardo Vault",
+      verifierSignature:
+        "6CE1332DE098FDC91761B3657800174745AE21B69E47A5F04BAB5987714DB7F62727FE53ED3AAF02F379A60ED8D37F8AD79979AC4658F92B454454857541997C1B",
+      requestId:
+        "AC6A3B8BB3FE3A48BAB81F2E2178E17334C5F1B34626547507C4408B7DE5EF79",
+      tokenId:
+        "72208439779716796881456983975101574059729788325677780970660741320469734825254",
+      txHash: "0x0f869aa0929cb4573d08de2fd94ca06ffc37b302e27ffed48f1f534266e58b69",
+      description: "Yamacardo Vault signed receipt after relocation.",
     },
   ],
   "card-hooh": [

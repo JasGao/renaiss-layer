@@ -1,37 +1,41 @@
+import Image from "next/image";
 import Link from "next/link";
 import { CopyInlineButton } from "@/components/common/copy-inline-button";
+import { RENAISS_CARD_IMAGES } from "@/lib/constants/media";
 
-type DepositStepId = "details" | "photos" | "ship" | "verification" | "mint";
+type DepositStepId = "intake" | "review" | "ship" | "verification" | "mint";
 type VerificationStepStatus =
   | "pending"
   | "verified"
   | "rejected";
+type CardReviewStatus = "idle" | "verified" | "retry";
+type MintStatus = "pending_mint" | "minted";
 
 const DEPOSIT_STEPS: { id: DepositStepId; label: string; description: string }[] = [
   {
-    id: "details",
-    label: "Fill card details",
-    description: "Input card metadata and declared value.",
+    id: "intake",
+    label: "Upload card",
+    description: "Input cert number and upload card front image.",
   },
   {
-    id: "photos",
-    label: "Upload photos",
-    description: "Add slab images and cert close-up.",
+    id: "review",
+    label: "Card review",
+    description: "API validates cert and image details.",
   },
   {
     id: "ship",
-    label: "Ship to verifier",
-    description: "Send package and provide tracking.",
+    label: "Shipping",
+    description: "Ship card to verifier and submit tracking.",
   },
   {
     id: "verification",
-    label: "Verification",
-    description: "Legit App reviews authenticity result.",
+    label: "Card verification",
+    description: "Legit App verifies the physical card.",
   },
   {
     id: "mint",
-    label: "Mint card",
-    description: "Mint collectible token after approval.",
+    label: "Check mint status",
+    description: "Review mint readiness after verification.",
   },
 ];
 
@@ -45,6 +49,28 @@ const VERIFICATION_TONE_CLASS: Record<VerificationStepStatus, string> = {
   pending: "bg-[#FDC60033] text-[#FDC600]",
   verified: "bg-[#78FF6C23] text-[#78FF6C]",
   rejected: "bg-[#FF326833] text-[#FF7D9F]",
+};
+
+const CARD_REVIEW_LABELS: Record<CardReviewStatus, string> = {
+  idle: "Not checked",
+  verified: "Verified",
+  retry: "Photo unreadable",
+};
+
+const CARD_REVIEW_TONE_CLASS: Record<CardReviewStatus, string> = {
+  idle: "bg-white/10 text-white/70",
+  verified: "bg-[#78FF6C23] text-[#78FF6C]",
+  retry: "bg-[#FF326833] text-[#FF7D9F]",
+};
+
+const MINT_STATUS_LABELS: Record<MintStatus, string> = {
+  pending_mint: "Pending mint",
+  minted: "Minted",
+};
+
+const MINT_STATUS_TONE_CLASS: Record<MintStatus, string> = {
+  pending_mint: "bg-[#FDC60033] text-[#FDC600]",
+  minted: "bg-[#78FF6C23] text-[#78FF6C]",
 };
 
 const VERIFIER_DESTINATION_FIELDS = [
@@ -62,6 +88,7 @@ const VERIFIER_DESTINATION_COPY_ALL = VERIFIER_DESTINATION_FIELDS.map(
 
 const DEPOSIT_CARD_DETAIL = {
   name: "Charizard",
+  imageUrl: RENAISS_CARD_IMAGES.charizard,
   setName: "Pokemon Japanese Neo 2 Promo",
   cardNumber: "6",
   gradingCompany: "PSA",
@@ -69,20 +96,24 @@ const DEPOSIT_CARD_DETAIL = {
   grade: "10",
   year: "2000",
   language: "Japanese",
-  tokenId: "Pending mint",
+  tokenId: "79231076852774006958229876952072361912714928956049120690326948509881775336997",
 } as const;
+
+const DEPOSIT_CARD_MINT_TX_HASH =
+  "0x7f21b40e2f6f1d3a7d0e6c2e1f8b8fd9b8b70f7ebf4f7a2903e8b64a6b0a2d11";
+const DEPOSIT_CARD_BSCSCAN_TX_URL = `https://bscscan.com/tx/${DEPOSIT_CARD_MINT_TX_HASH}`;
 
 function normalizeStep(value: string | undefined): DepositStepId {
   if (
-    value === "details" ||
-    value === "photos" ||
+    value === "intake" ||
+    value === "review" ||
     value === "ship" ||
     value === "verification" ||
     value === "mint"
   ) {
     return value;
   }
-  return "details";
+  return "intake";
 }
 
 function normalizeVerificationStatus(value: string | undefined): VerificationStepStatus {
@@ -92,14 +123,72 @@ function normalizeVerificationStatus(value: string | undefined): VerificationSte
   return "pending";
 }
 
+function normalizeCardReviewStatus(value: string | undefined): CardReviewStatus {
+  if (value === "idle" || value === "verified" || value === "retry") {
+    return value;
+  }
+  return "idle";
+}
+
+function normalizeMintStatus(value: string | undefined): MintStatus {
+  if (value === "pending_mint" || value === "minted") {
+    return value;
+  }
+  return "pending_mint";
+}
+
+function maskMiddleDigits(value: string, prefix = 10, suffix = 8): string {
+  if (value.length <= prefix + suffix) {
+    return value;
+  }
+  return `${value.slice(0, prefix)}...${value.slice(-suffix)}`;
+}
+
+function buildDepositHref({
+  step,
+  status,
+  review,
+  certNumber,
+  frontImage,
+  mintStatus,
+}: {
+  step: DepositStepId;
+  status: VerificationStepStatus;
+  review: CardReviewStatus;
+  certNumber?: string;
+  frontImage?: string;
+  mintStatus?: MintStatus;
+}): string {
+  const query = new URLSearchParams({
+    step,
+    status,
+    review,
+    mintStatus: mintStatus ?? "pending_mint",
+  });
+  if (certNumber) query.set("cert", certNumber);
+  if (frontImage) query.set("frontImage", frontImage);
+  return `/deposit/new?${query.toString()}`;
+}
+
 export default async function NewDepositPage({
   searchParams,
 }: {
-  searchParams?: Promise<{ step?: string; status?: string }>;
+  searchParams?: Promise<{
+    step?: string;
+    status?: string;
+    review?: string;
+    cert?: string;
+    frontImage?: string;
+    mintStatus?: string;
+  }>;
 }) {
   const resolvedSearchParams = searchParams ? await searchParams : undefined;
   const step = normalizeStep(resolvedSearchParams?.step);
   const status = normalizeVerificationStatus(resolvedSearchParams?.status);
+  const review = normalizeCardReviewStatus(resolvedSearchParams?.review);
+  const mintStatus = normalizeMintStatus(resolvedSearchParams?.mintStatus);
+  const certNumber = resolvedSearchParams?.cert?.trim() ?? "";
+  const frontImage = resolvedSearchParams?.frontImage?.trim() ?? "";
   const currentStepIndex = DEPOSIT_STEPS.findIndex((item) => item.id === step);
   const isVerificationApproved = status === "verified";
 
@@ -112,7 +201,7 @@ export default async function NewDepositPage({
       <div className="mt-6">
         <h1 className="text-2xl font-semibold md:text-3xl">New Deposit Request</h1>
         <p className="mt-2 text-sm text-white/60">
-          Complete each step to ship to verifier, pass verification, and mint your card.
+          Complete each step from cert intake to verification, shipping, and mint status.
         </p>
       </div>
 
@@ -128,7 +217,14 @@ export default async function NewDepositPage({
                   {isCurrent ? (
                     <div className="rounded-full bg-rainbow p-px shadow-[0_0_20px_rgba(130,96,255,0.45)]">
                       <Link
-                        href={`/deposit/new?step=${item.id}&status=${status}`}
+                        href={buildDepositHref({
+                          step: item.id,
+                          status,
+                          review,
+                          certNumber,
+                          frontImage,
+                          mintStatus,
+                        })}
                         className="inline-flex h-12 items-center gap-3 rounded-full bg-[#0f1014] px-4 text-white transition-colors"
                       >
                         <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-white/10 text-xs font-semibold text-white">
@@ -139,7 +235,14 @@ export default async function NewDepositPage({
                     </div>
                   ) : (
                     <Link
-                      href={`/deposit/new?step=${item.id}&status=${status}`}
+                      href={buildDepositHref({
+                        step: item.id,
+                        status,
+                        review,
+                        certNumber,
+                        frontImage,
+                        mintStatus,
+                      })}
                       className={`inline-flex h-12 items-center gap-3 rounded-full px-4 transition-colors ${
                         isDone ? "bg-white/10 text-white" : "bg-[#151515] text-white/60"
                       }`}
@@ -164,179 +267,204 @@ export default async function NewDepositPage({
         </div>
       </section>
 
-      {step === "details" ? (
+      {step === "intake" ? (
         <section className="mt-6 rounded-2xl border border-white/20 bg-brand-1000/30 p-5 md:p-6">
-          <h2 className="text-lg font-semibold">Step 1 · Enter Card Information</h2>
+          <h2 className="text-lg font-semibold">Step 1 · Upload Card</h2>
           <p className="mt-1 text-sm text-white/50">
-            Fill in your card details to start the deposit request.
+            Enter certification number and upload the front image. Then submit for API review.
           </p>
 
-          <div className="mt-5 grid gap-3 sm:grid-cols-2">
-            <div>
-              <label className="text-xs text-white/50" htmlFor="category">
-                Card category
-              </label>
-              <input
-                id="category"
-                placeholder="e.g. Pokemon"
-                className="mt-1 h-11 w-full rounded-xl border border-white/20 bg-brand px-3 text-sm text-white"
-              />
-            </div>
-            <div>
-              <label className="text-xs text-white/50" htmlFor="card-name">
-                Card name
-              </label>
-              <input
-                id="card-name"
-                placeholder="e.g. Charizard"
-                className="mt-1 h-11 w-full rounded-xl border border-white/20 bg-brand px-3 text-sm text-white"
-              />
-            </div>
-            <div>
-              <label className="text-xs text-white/50" htmlFor="set-name">
-                Set name
-              </label>
-              <input
-                id="set-name"
-                placeholder="e.g. Pokemon Japanese Neo 2 Promo"
-                className="mt-1 h-11 w-full rounded-xl border border-white/20 bg-brand px-3 text-sm text-white"
-              />
-            </div>
-            <div>
-              <label className="text-xs text-white/50" htmlFor="card-number">
-                Card number
-              </label>
-              <input
-                id="card-number"
-                placeholder="e.g. 6"
-                className="mt-1 h-11 w-full rounded-xl border border-white/20 bg-brand px-3 text-sm text-white"
-              />
-            </div>
-            <div>
-              <label className="text-xs text-white/50" htmlFor="year">
-                Year
-              </label>
-              <input
-                id="year"
-                placeholder="e.g. 2000"
-                className="mt-1 h-11 w-full rounded-xl border border-white/20 bg-brand px-3 text-sm text-white"
-              />
-            </div>
-            <div>
-              <label className="text-xs text-white/50" htmlFor="grader">
-                Grading company and grade
-              </label>
-              <input
-                id="grader"
-                placeholder="e.g. PSA 9"
-                className="mt-1 h-11 w-full rounded-xl border border-white/20 bg-brand px-3 text-sm text-white"
-              />
-            </div>
+          <form className="mt-5 space-y-4" method="GET" action="/deposit/new">
+            <input type="hidden" name="step" value="review" />
+            <input type="hidden" name="status" value={status} />
+
             <div>
               <label className="text-xs text-white/50" htmlFor="cert">
                 Certification number
               </label>
               <input
                 id="cert"
+                name="cert"
+                defaultValue={certNumber}
                 placeholder="e.g. PSA74736597"
                 className="mt-1 h-11 w-full rounded-xl border border-white/20 bg-brand px-3 text-sm text-white"
               />
             </div>
-            <div>
-              <label className="text-xs text-white/50" htmlFor="value">
-                Declared value (USD)
-              </label>
-              <input
-                id="value"
-                placeholder="e.g. 2500"
-                className="mt-1 h-11 w-full rounded-xl border border-white/20 bg-brand px-3 text-sm text-white"
-              />
-            </div>
-            <div className="sm:col-span-2">
-              <label className="text-xs text-white/50" htmlFor="notes">
-                Notes
-              </label>
-              <textarea
-                id="notes"
-                placeholder="Add condition notes or special handling requests."
-                className="mt-1 min-h-24 w-full rounded-xl border border-white/20 bg-brand px-3 py-2 text-sm text-white"
-              />
-            </div>
-          </div>
 
-          <div className="mt-5 flex flex-wrap gap-2">
-            <Link
-              href={`/deposit/new?step=photos&status=${status}`}
-              className="inline-flex h-11 items-center rounded-full bg-primary px-5 text-sm font-semibold text-white"
-            >
-              Continue to photo upload
-            </Link>
-          </div>
+            <div className="rounded-xl border border-white/15 bg-brand p-4">
+              <p className="text-xs uppercase tracking-wide text-white/50">Upload card front image</p>
+              <div className="mt-2 rounded-xl border border-dashed border-white/30 bg-brand-1000/40 p-5 text-center">
+                <p className="text-sm font-medium text-white/90">Front image upload area</p>
+                <p className="mt-1 text-xs text-white/55">
+                  Supported format: JPG, PNG. Please ensure the cert number is readable.
+                </p>
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-white/15 bg-brand p-4">
+              <p className="text-xs uppercase tracking-wide text-white/50">Front image upload checklist</p>
+              <ul className="mt-2 space-y-1 text-sm text-white/75">
+                <li>- Full card/slab visible</li>
+                <li>- Cert number must be readable</li>
+                <li>- Avoid glare and blur</li>
+              </ul>
+            </div>
+            <input type="hidden" name="frontImage" value={frontImage || "card-front-uploaded.jpg"} />
+
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="submit"
+                name="review"
+                value="verified"
+                className="inline-flex h-11 items-center rounded-full bg-primary px-5 text-sm font-semibold text-white"
+              >
+                Submit
+              </button>
+              <button
+                type="submit"
+                name="review"
+                value="retry"
+                className="inline-flex h-11 items-center rounded-full border border-white/20 px-5 text-sm font-semibold text-white/80"
+              >
+                Submit (simulate unreadable photo)
+              </button>
+            </div>
+          </form>
         </section>
       ) : null}
 
-      {step === "photos" ? (
+      {step === "review" ? (
         <section className="mt-6 rounded-2xl border border-white/20 bg-brand-1000/30 p-5 md:p-6">
-          <h2 className="text-lg font-semibold">Step 2 · Upload Photos</h2>
+          <h2 className="text-lg font-semibold">Step 2 · Card Review</h2>
           <p className="mt-1 text-sm text-white/50">
-            Upload required photos before shipping to verifier.
+            Our API checks cert number and front image. If valid, card details are returned.
           </p>
 
           <div className="mt-4 rounded-xl border border-white/15 bg-brand p-4">
-            <div className="grid gap-4 md:grid-cols-2">
-              <div>
-                <p className="text-xs uppercase tracking-wide text-white/50">Required photos</p>
-                <ul className="mt-2 space-y-1 text-sm text-white/75">
-                  <li>1. Front of slab/card</li>
-                  <li>2. Back of slab/card</li>
-                  <li>3. Certification number close-up</li>
-                  <li>4. Optional extra condition photos</li>
-                </ul>
-              </div>
-              <div>
-                <p className="text-xs uppercase tracking-wide text-white/50">Photo requirements</p>
-                <ul className="mt-2 space-y-1 text-sm text-white/75">
-                  <li>- Good lighting</li>
-                  <li>- No glare</li>
-                  <li>- Full slab/card visible</li>
-                  <li>- Certification number readable</li>
-                </ul>
-              </div>
-            </div>
+            <p className="text-xs text-white/50">Certification number</p>
+            <p className="mt-1 font-mono text-sm">{certNumber || "Not provided"}</p>
+            <p className="mt-3 text-xs text-white/50">Uploaded front image</p>
+            <p className="mt-1 text-sm">{frontImage || "Not provided"}</p>
           </div>
 
-          <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            {["Front", "Back", "Cert close-up", "Other photos"].map((label) => (
-              <div
-                key={label}
-                className="rounded-xl border border-dashed border-white/30 bg-brand p-4 text-center"
-              >
-                <p className="text-sm font-medium">{label}</p>
-                <p className="mt-1 text-xs text-white/50">Upload ready</p>
-              </div>
-            ))}
+          <div className="mt-4 rounded-xl border border-white/15 bg-brand p-4">
+            <p className="text-xs uppercase tracking-wide text-white/50">Card review status</p>
+            <span
+              className={`mt-2 inline-flex rounded-full px-3 py-1 text-xs font-medium ${CARD_REVIEW_TONE_CLASS[review]}`}
+            >
+              {CARD_REVIEW_LABELS[review]}
+            </span>
           </div>
 
-          <div className="mt-5 flex flex-wrap gap-2">
-            <Link
-              href={`/deposit/new?step=details&status=${status}`}
-              className="inline-flex h-11 items-center rounded-full border border-white/20 px-5 text-sm font-semibold text-white/80"
-            >
-              Back to details
-            </Link>
-            <Link
-              href="/deposit/new?step=ship&status=pending"
-              className="inline-flex h-11 items-center rounded-full bg-primary px-5 text-sm font-semibold text-white"
-            >
-              Continue to ship to verifier
-            </Link>
-          </div>
+          {review === "verified" ? (
+            <>
+              <section className="mt-4 rounded-xl border border-[#78FF6C55] bg-[#78FF6C12] p-4">
+                <p className="text-sm font-medium text-[#78FF6C]">
+                  Card information verified successfully.
+                </p>
+                <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                  <div>
+                    <p className="text-xs text-white/50">Card cert number</p>
+                    <p className="mt-1 font-mono text-sm">{DEPOSIT_CARD_DETAIL.certificationNumber}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-white/50">Grading company</p>
+                    <p className="mt-1 text-sm">{DEPOSIT_CARD_DETAIL.gradingCompany}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-white/50">Grading</p>
+                    <p className="mt-1 text-sm">{DEPOSIT_CARD_DETAIL.grade}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-white/50">Set</p>
+                    <p className="mt-1 text-sm">{DEPOSIT_CARD_DETAIL.setName}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-white/50">Card number</p>
+                    <p className="mt-1 text-sm">{DEPOSIT_CARD_DETAIL.cardNumber}</p>
+                  </div>
+                </div>
+              </section>
+
+              <div className="mt-5 flex flex-wrap gap-2">
+                <Link
+                  href={buildDepositHref({
+                    step: "intake",
+                    status,
+                    review,
+                    certNumber,
+                    frontImage,
+                    mintStatus,
+                  })}
+                  className="inline-flex h-11 items-center rounded-full border border-white/20 px-5 text-sm font-semibold text-white/80"
+                >
+                  Back to step 1
+                </Link>
+                <Link
+                  href={buildDepositHref({
+                    step: "ship",
+                    status: "pending",
+                    review,
+                    certNumber,
+                    frontImage,
+                    mintStatus,
+                  })}
+                  className="inline-flex h-11 items-center rounded-full bg-primary px-5 text-sm font-semibold text-white"
+                >
+                  Continue to shipping
+                </Link>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="mt-4 rounded-xl border border-[#FF326855] bg-[#FF326822] p-4">
+                <p className="text-sm font-medium text-[#FF7D9F]">
+                  {review === "retry" ? "Picture not verified" : "Review not submitted"}
+                </p>
+                <p className="mt-1 text-sm text-white/85">
+                  {review === "retry"
+                    ? "We could not verify this image. Please upload the front picture again and resubmit."
+                    : "Please complete step 1 and submit your cert number and front image."}
+                </p>
+              </div>
+              <div className="mt-5 flex flex-wrap gap-2">
+                <Link
+                  href={buildDepositHref({
+                    step: "intake",
+                    status,
+                    review: "idle",
+                    certNumber,
+                    frontImage,
+                    mintStatus,
+                  })}
+                  className="inline-flex h-11 items-center rounded-full bg-primary px-5 text-sm font-semibold text-white"
+                >
+                  Upload picture again
+                </Link>
+                {review === "retry" ? (
+                  <Link
+                    href={buildDepositHref({
+                      step: "review",
+                      status,
+                      review: "verified",
+                      certNumber,
+                      frontImage,
+                      mintStatus,
+                    })}
+                    className="inline-flex h-11 items-center rounded-full border border-white/20 px-5 text-sm font-semibold text-white/80"
+                  >
+                    Simulate successful verification
+                  </Link>
+                ) : null}
+              </div>
+            </>
+          )}
         </section>
       ) : null}
 
       {step === "verification" ? (
         <section className="mt-6 rounded-2xl border border-white/20 bg-brand-1000/30 p-5 md:p-6">
-          <h2 className="text-lg font-semibold">Step 4 · Verification</h2>
+          <h2 className="text-lg font-semibold">Step 4 · Card Verification</h2>
           <p className="mt-1 text-sm text-white/50">
             Verification is asynchronous. Expected review time is 3-4 business days.
           </p>
@@ -405,7 +533,14 @@ export default async function NewDepositPage({
               ).map((option) => (
                 <Link
                   key={option}
-                  href={`/deposit/new?step=verification&status=${option}`}
+                  href={buildDepositHref({
+                    step: "verification",
+                    status: option,
+                    review,
+                    certNumber,
+                    frontImage,
+                    mintStatus,
+                  })}
                   className={`rounded-full border px-3 py-1.5 text-xs ${
                     option === status
                       ? "border-primary/70 bg-primary/10 text-white"
@@ -421,7 +556,14 @@ export default async function NewDepositPage({
           <div className="mt-5 flex flex-wrap gap-2">
             {status === "pending" && (
               <Link
-                href={`/deposit/new?step=verification&status=verified`}
+                href={buildDepositHref({
+                  step: "verification",
+                  status: "verified",
+                  review,
+                  certNumber,
+                  frontImage,
+                  mintStatus,
+                })}
                 className="inline-flex h-11 items-center rounded-full bg-primary px-5 text-sm font-semibold text-white"
               >
                 Mark verified
@@ -429,15 +571,22 @@ export default async function NewDepositPage({
             )}
             {status === "verified" && (
               <Link
-                href="/deposit/new?step=mint&status=verified"
+                href={buildDepositHref({
+                  step: "mint",
+                  status: "verified",
+                  review,
+                  certNumber,
+                  frontImage,
+                  mintStatus,
+                })}
                 className="inline-flex h-11 items-center rounded-full bg-primary px-5 text-sm font-semibold text-white"
               >
-                View mint status
+                Check mint status
               </Link>
             )}
             {status === "rejected" && (
               <Link
-                href="/deposit/new?step=details&status=rejected"
+                href="/deposit/new?step=intake&status=rejected&review=idle"
                 className="inline-flex h-11 items-center rounded-full bg-primary px-5 text-sm font-semibold text-white"
               >
                 Start a new submission
@@ -545,13 +694,27 @@ export default async function NewDepositPage({
 
           <div className="mt-5 flex flex-wrap gap-2">
             <Link
-              href={`/deposit/new?step=photos&status=${status}`}
+              href={buildDepositHref({
+                step: "review",
+                status,
+                review,
+                certNumber,
+                frontImage,
+                mintStatus,
+              })}
               className="inline-flex h-11 items-center rounded-full border border-white/20 px-5 text-sm font-semibold text-white/80"
             >
-              Back to photos
+              Back to card review
             </Link>
             <Link
-              href="/deposit/new?step=verification&status=pending"
+              href={buildDepositHref({
+                step: "verification",
+                status: "pending",
+                review,
+                certNumber,
+                frontImage,
+                mintStatus,
+              })}
               className="inline-flex h-11 items-center rounded-full bg-primary px-5 text-sm font-semibold text-white"
             >
               Submit
@@ -562,46 +725,110 @@ export default async function NewDepositPage({
 
       {step === "mint" ? (
         <section className="mt-6 rounded-2xl border border-white/20 bg-brand-1000/30 p-5 md:p-6">
-          <h2 className="text-lg font-semibold">Step 5 · Mint Card</h2>
+          <h2 className="text-lg font-semibold">Step 5 · Check Mint Status</h2>
           <p className="mt-1 text-sm text-white/50">
-            Minting is available after verification approval.
+            Check mint status after verification approval.
           </p>
 
           {isVerificationApproved ? (
             <div className="mt-4 space-y-3">
               <section className="rounded-xl border border-white/15 bg-brand p-4">
-                <p className="text-xs uppercase tracking-wide text-white/50">Card detail</p>
-                <h3 className="mt-2 text-base font-semibold">{DEPOSIT_CARD_DETAIL.name}</h3>
-                <p className="mt-1 text-sm text-white/70">
-                  {DEPOSIT_CARD_DETAIL.setName} #{DEPOSIT_CARD_DETAIL.cardNumber}
-                </p>
-                <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                  <div>
-                    <p className="text-xs text-white/50">Token ID</p>
-                    <p className="mt-1 font-mono text-sm">{DEPOSIT_CARD_DETAIL.tokenId}</p>
+                <div className="grid gap-4 md:grid-cols-[160px_1fr] md:items-start">
+                  <div className="relative mx-auto h-56 w-40 overflow-hidden rounded-xl border border-white/15 bg-black/20 md:mx-0">
+                    <Image
+                      src={DEPOSIT_CARD_DETAIL.imageUrl}
+                      alt={DEPOSIT_CARD_DETAIL.name}
+                      fill
+                      className="object-cover"
+                    />
                   </div>
                   <div>
-                    <p className="text-xs text-white/50">Grader</p>
-                    <p className="mt-1 text-sm">{DEPOSIT_CARD_DETAIL.gradingCompany}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-white/50">Serial</p>
-                    <p className="mt-1 font-mono text-sm">{DEPOSIT_CARD_DETAIL.certificationNumber}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-white/50">Grade</p>
-                    <p className="mt-1 text-sm">{DEPOSIT_CARD_DETAIL.grade}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-white/50">Year</p>
-                    <p className="mt-1 text-sm">{DEPOSIT_CARD_DETAIL.year}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-white/50">Language</p>
-                    <p className="mt-1 text-sm">{DEPOSIT_CARD_DETAIL.language}</p>
+                    <p className="text-xs uppercase tracking-wide text-white/50">Card detail</p>
+                    <h3 className="mt-2 text-base font-semibold">{DEPOSIT_CARD_DETAIL.name}</h3>
+                    <p className="mt-1 text-sm text-white/70">
+                      {DEPOSIT_CARD_DETAIL.setName} #{DEPOSIT_CARD_DETAIL.cardNumber}
+                    </p>
+                    <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                      <div>
+                        <p className="text-xs text-white/50">Token ID</p>
+                        <p className="mt-1 font-mono text-sm" title={DEPOSIT_CARD_DETAIL.tokenId}>
+                          {maskMiddleDigits(DEPOSIT_CARD_DETAIL.tokenId)}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-white/50">Mint status</p>
+                        <span
+                          className={`mt-1 inline-flex rounded-full px-3 py-1 text-xs font-medium ${MINT_STATUS_TONE_CLASS[mintStatus]}`}
+                        >
+                          {MINT_STATUS_LABELS[mintStatus]}
+                        </span>
+                      </div>
+                      <div>
+                        <p className="text-xs text-white/50">Grader</p>
+                        <p className="mt-1 text-sm">{DEPOSIT_CARD_DETAIL.gradingCompany}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-white/50">Serial</p>
+                        <p className="mt-1 font-mono text-sm">
+                          {DEPOSIT_CARD_DETAIL.certificationNumber}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-white/50">Grade</p>
+                        <p className="mt-1 text-sm">{DEPOSIT_CARD_DETAIL.grade}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-white/50">Year</p>
+                        <p className="mt-1 text-sm">{DEPOSIT_CARD_DETAIL.year}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-white/50">Language</p>
+                        <p className="mt-1 text-sm">{DEPOSIT_CARD_DETAIL.language}</p>
+                      </div>
+                    </div>
+                    {mintStatus === "minted" ? (
+                      <div className="mt-4">
+                        <p className="text-xs text-white/50">Tx hash</p>
+                        <a
+                          href={DEPOSIT_CARD_BSCSCAN_TX_URL}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="mt-1 inline-flex font-mono text-sm text-white/80 underline decoration-white/40 underline-offset-2 hover:text-white"
+                          title={DEPOSIT_CARD_MINT_TX_HASH}
+                        >
+                          {maskMiddleDigits(DEPOSIT_CARD_MINT_TX_HASH, 12, 10)}
+                        </a>
+                      </div>
+                    ) : null}
                   </div>
                 </div>
               </section>
+
+              <div className="rounded-xl border border-white/15 bg-brand p-4">
+                <p className="text-xs uppercase tracking-wide text-white/50">Simulate mint status</p>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {(["pending_mint", "minted"] as MintStatus[]).map((option) => (
+                    <Link
+                      key={option}
+                      href={buildDepositHref({
+                        step: "mint",
+                        status,
+                        review,
+                        certNumber,
+                        frontImage,
+                        mintStatus: option,
+                      })}
+                      className={`rounded-full border px-3 py-1.5 text-xs ${
+                        option === mintStatus
+                          ? "border-primary/70 bg-primary/10 text-white"
+                          : "border-white/20 text-white/70 hover:text-white"
+                      }`}
+                    >
+                      {MINT_STATUS_LABELS[option]}
+                    </Link>
+                  ))}
+                </div>
+              </div>
             </div>
           ) : (
             <div className="mt-4 rounded-xl border border-white/15 bg-brand p-4">
@@ -614,19 +841,17 @@ export default async function NewDepositPage({
 
           <div className="mt-5 flex flex-wrap gap-2">
             <Link
-              href={`/deposit/new?step=verification&status=${status}`}
+              href="/deposit"
+              className="inline-flex h-11 items-center rounded-full bg-primary px-5 text-sm font-semibold text-white"
+            >
+              Back to deposit
+            </Link>
+            <Link
+              href="/cards"
               className="inline-flex h-11 items-center rounded-full border border-white/20 px-5 text-sm font-semibold text-white/80"
             >
-              Back to verification
+              Check card
             </Link>
-            {isVerificationApproved ? (
-              <Link
-                href="/deposit"
-                className="inline-flex h-11 items-center rounded-full bg-primary px-5 text-sm font-semibold text-white"
-              >
-                Mint card (demo)
-              </Link>
-            ) : null}
           </div>
         </section>
       ) : null}

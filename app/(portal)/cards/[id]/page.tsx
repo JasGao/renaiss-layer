@@ -28,13 +28,6 @@ type ActivitySummaryItem = {
   eventId?: string;
 };
 
-const POST_VERIFICATION_ACTIVITY_TYPES: OnChainActivityEvent["type"][] = [
-  "vault_received_deposit",
-  "relocation_started",
-  "relocation_received",
-  "relocation_cancelled",
-];
-
 const PIKACHU_ACTIVITY_CONFIG: ActivitySummaryItem[] = [
   {
     status: "DEPOSIT_OWNER_INITIATED",
@@ -121,12 +114,40 @@ const RAYQUAZA_ACTIVITY_CONFIG: ActivitySummaryItem[] = [
   },
 ];
 
+const PLAYING_IN_THE_SEA_PIKACHU_ACTIVITY_CONFIG: ActivitySummaryItem[] = [
+  {
+    status: "DEPOSIT_VAULT_RECEIVED",
+    label: "Deposit Received by Vault",
+    eventType: "vault_received_deposit",
+  },
+];
+
+const ACEROLAS_PREMONITION_ACTIVITY_CONFIG: ActivitySummaryItem[] = [
+  {
+    status: "DEPOSIT_VAULT_RECEIVED",
+    label: "Deposit Received by Vault",
+    eventType: "vault_received_deposit",
+  },
+  {
+    status: "RELOCATION_VAULT_DISPATCHED",
+    label: "Relocation Shipped",
+    eventType: "relocation_started",
+  },
+  {
+    status: "RELOCATION_VAULT_RECEIVED",
+    label: "Relocation Received",
+    eventType: "relocation_received",
+  },
+];
+
 const ACTIVITY_SUMMARY_CONFIG_BY_CARD: Record<
   string,
   ActivitySummaryItem[]
 > = {
   "card-pikachu": PIKACHU_ACTIVITY_CONFIG,
   "card-blastoise": BLASTOISE_ACTIVITY_CONFIG,
+  "card-playing-in-the-sea-pikachu": PLAYING_IN_THE_SEA_PIKACHU_ACTIVITY_CONFIG,
+  "card-acerolas-premonition": ACEROLAS_PREMONITION_ACTIVITY_CONFIG,
   "card-hooh": PIKACHU_ACTIVITY_CONFIG,
   "card-rayquaza": RAYQUAZA_ACTIVITY_CONFIG,
 };
@@ -194,6 +215,14 @@ function getActivitySummaryMatchedEvent(
     : events.find((event) => event.type === activityItem.eventType);
 }
 
+function getVerifierDisplay(actorRole: string | undefined, fallback: string) {
+  const normalizedActorRole = actorRole?.toLowerCase();
+  if (normalizedActorRole?.includes("yama")) return "Yamacardo";
+  if (normalizedActorRole?.includes("hoopi")) return "Hoopi";
+  if (normalizedActorRole?.includes("legit")) return "Legit App";
+  return fallback;
+}
+
 export default async function CardDetailPage({
   params,
 }: {
@@ -229,12 +258,11 @@ export default async function CardDetailPage({
     card.custody.protocolStatus === "RELOCATION_VAULT_DISPATCHED";
   const vaultDisplay = isShipping ? "Shipping" : configuredVaultDisplay;
   const verifierDisplay =
-    card.custody.protocolStatus === "RELOCATION_VAULT_RECEIVED" ? "YamaCardo" : "Legit App";
-  const verificationVerifierDisplay = latestVerificationEvent?.actorRole?.toLowerCase().includes("yama")
-    ? "YamaCardo"
-    : latestVerificationEvent?.actorRole?.toLowerCase().includes("legit")
-      ? "Legit App"
-      : verifierDisplay;
+    card.custody.protocolStatus === "RELOCATION_VAULT_RECEIVED" ? "Yamacardo" : "Legit App";
+  const verificationVerifierDisplay = getVerifierDisplay(
+    latestVerificationEvent?.actorRole,
+    verifierDisplay,
+  );
   const verificationSignerWalletAddress =
     latestVerificationEvent?.actorAddress ??
     latestVerificationEvent?.verifierAddress ??
@@ -400,12 +428,10 @@ export default async function CardDetailPage({
                 const currentVerificationSignature =
                   verificationEvent.verifierSignature ?? verificationSignature;
                 const currentVerificationTxHash = verificationEvent.txHash ?? verificationTxHash;
-                const currentVerificationVerifierDisplay =
-                  verificationEvent.actorRole?.toLowerCase().includes("yama")
-                    ? "YamaCardo"
-                    : verificationEvent.actorRole?.toLowerCase().includes("legit")
-                      ? "Legit App"
-                      : verificationVerifierDisplay;
+                const currentVerificationVerifierDisplay = getVerifierDisplay(
+                  verificationEvent.actorRole,
+                  verificationVerifierDisplay,
+                );
 
                 return (
                   <div
@@ -442,27 +468,29 @@ export default async function CardDetailPage({
                             <CopyInlineButton value={currentVerificationTxHash} label="Copy tx hash" />
                           </div>
                         </div>
-                        <div className="sm:col-span-2">
-                          <p className="text-xs text-white/50">Verifier comments</p>
-                          <p className="mt-1 overflow-hidden text-ellipsis whitespace-nowrap text-sm text-white/80">
-                            {verificationResultUrl ? (
-                              <>
-                                <span>Authentic </span>
-                                <a
-                                  href={verificationResultUrl}
-                                  target="_blank"
-                                  rel="noreferrer"
-                                  title={verificationResultUrl}
-                                  className="underline decoration-white/40 underline-offset-2 hover:text-white"
-                                >
-                                  {verificationResultUrl}
-                                </a>
-                              </>
-                            ) : (
-                              "Verifier comments link unavailable"
-                            )}
-                          </p>
-                        </div>
+                        {!verificationEvent.hideVerifierComments ? (
+                          <div className="sm:col-span-2">
+                            <p className="text-xs text-white/50">Verifier comments</p>
+                            <p className="mt-1 overflow-hidden text-ellipsis whitespace-nowrap text-sm text-white/80">
+                              {verificationResultUrl ? (
+                                <>
+                                  <span>Authentic </span>
+                                  <a
+                                    href={verificationResultUrl}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    title={verificationResultUrl}
+                                    className="underline decoration-white/40 underline-offset-2 hover:text-white"
+                                  >
+                                    {verificationResultUrl}
+                                  </a>
+                                </>
+                              ) : (
+                                "Verifier comments link unavailable"
+                              )}
+                            </p>
+                          </div>
+                        ) : null}
                         <div className="sm:col-span-2">
                           <details className="mt-1 rounded-md border border-white/15 bg-brand/30 p-3">
                             <summary className="cursor-pointer text-[11px] uppercase tracking-wide text-white/70">
@@ -473,7 +501,8 @@ export default async function CardDetailPage({
                                 <p className="text-white/50">Signer Wallet Address</p>
                                 <div className="mt-1 flex items-center gap-2">
                                   <p className="break-all font-mono">
-                                    verifier (legit app): {formatMaskedValue(currentVerificationSignerWalletAddress)}
+                                    verifier ({currentVerificationVerifierDisplay}):{" "}
+                                    {formatMaskedValue(currentVerificationSignerWalletAddress)}
                                   </p>
                                   <CopyInlineButton
                                     value={currentVerificationSignerWalletAddress}
@@ -561,7 +590,7 @@ export default async function CardDetailPage({
                       ? `vault (${activityVaultFrom})`
                       : isRelocationReceived
                         ? `vault (${activityVaultTo})`
-                      : "vault (yamacardo)";
+                        : `vault (${vaultDisplay})`;
                 const signatureLabelPrefix =
                   activityItem.status === "DEPOSIT_OWNER_INITIATED"
                     ? "user signature"
